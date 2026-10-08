@@ -1,0 +1,78 @@
+name: ApplyEase CI
+on: [push, pull_request]
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: applyease
+          POSTGRES_USER: applyease
+          POSTGRES_PASSWORD: applyease
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U applyease -d applyease"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r backend/requirements.txt
+      - run: python -m alembic -c backend/alembic.ini upgrade head
+      - run: python backend/scripts/seed.py
+        env:
+          DATABASE_URL: postgresql+psycopg://applyease:applyease@localhost:5432/applyease
+          JWT_SECRET: ci-secret
+      - run: nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 >/tmp/applyease-api.log 2>&1 &
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+          DATABASE_URL: postgresql+psycopg://applyease:applyease@localhost:5432/applyease
+          JWT_SECRET: ci-secret
+          CORS_ORIGINS: http://127.0.0.1:4173,http://localhost:4173
+          TEST_RESET_TOKEN: ci-reset
+      - run: for i in {1..30}; do curl -fsS http://127.0.0.1:8000/health && break; sleep 1; done
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+        env:
+          VITE_API_URL: http://127.0.0.1:8000
+          TEST_RESET_TOKEN: ci-reset
+      - run: npm run test:e2e
+        env:
+          VITE_API_URL: http://127.0.0.1:8000
+      - run: npm run test:a11y
+        env:
+          VITE_API_URL: http://127.0.0.1:8000
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: applyease
+          POSTGRES_USER: applyease
+          POSTGRES_PASSWORD: applyease
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U applyease -d applyease"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r backend/requirements.txt pytest
+      - run: python -m alembic -c backend/alembic.ini upgrade head
+      - run: python backend/scripts/seed.py
+        env:
+          DATABASE_URL: postgresql+psycopg://applyease:applyease@localhost:5432/applyease
+          JWT_SECRET: ci-secret
+      - run: pytest -q backend/tests
+        env:
+          DATABASE_URL: postgresql+psycopg://applyease:applyease@localhost:5432/applyease
+          JWT_SECRET: ci-secret

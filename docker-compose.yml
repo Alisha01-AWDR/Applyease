@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: applyease
+      POSTGRES_USER: applyease
+      POSTGRES_PASSWORD: applyease
+    ports:
+      - "5432:5432"
+    volumes:
+      - applyease_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U applyease -d applyease"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://applyease:applyease@postgres:5432/applyease
+      JWT_SECRET: ${JWT_SECRET:-local-only-change-me}
+      APP_ENV: ${APP_ENV:-development}
+      TEST_RESET_TOKEN: ${TEST_RESET_TOKEN:-}
+      CORS_ORIGINS: http://localhost:5173,http://localhost:4173,http://localhost:80
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5-5}
+      APPROVED_JOB_HOSTS: ${APPROVED_JOB_HOSTS:-}
+      DISCLOSURE_ENCRYPTION_KEY: ${DISCLOSURE_ENCRYPTION_KEY:-}
+      FILE_STORAGE_DIR: /var/lib/applyease/files
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - applyease_files:/var/lib/applyease/files
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  applyease_files:
+  applyease_pg:

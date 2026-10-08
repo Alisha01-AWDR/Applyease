@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# builds/caches
+dist/
+.vite/
+coverage/
+playwright-report/
+test-results/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+
+# environment / secrets
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+backend/storage/files/*
+!backend/storage/files/.gitkeep
